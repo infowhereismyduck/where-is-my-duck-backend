@@ -3,9 +3,12 @@ const router = express.Router();
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 
+// Admin login
 router.post('/login', async (req, res) => {
   try {
     const { password } = req.body;
+    
+    console.log('Login attempt received');
     
     if (!password) {
       return res.status(400).json({ error: 'Password required' });
@@ -14,7 +17,7 @@ router.post('/login', async (req, res) => {
     const hashedPassword = process.env.ADMIN_PASSWORD_HASHED;
     
     if (!hashedPassword) {
-      console.error('ADMIN_PASSWORD_HASHED not set in environment');
+      console.error('ADMIN_PASSWORD_HASHED not set');
       return res.status(500).json({ error: 'Server configuration error' });
     }
     
@@ -37,11 +40,11 @@ router.post('/login', async (req, res) => {
     });
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({ error: 'Login failed' });
+    res.status(500).json({ error: 'Login failed: ' + error.message });
   }
 });
 
-// Add verify endpoint for token validation
+// Verify token
 router.post('/verify', async (req, res) => {
   try {
     const authHeader = req.headers.authorization;

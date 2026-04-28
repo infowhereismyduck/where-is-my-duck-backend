@@ -25,72 +25,25 @@ const storage = new CloudinaryStorage({
 
 const upload = multer({ storage });
 
-// GET all memes with pagination and random order (stable per session)
+// GET all memes (SIMPLE VERSION - returns array directly)
 router.get('/', async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 24;
-    const offset = (page - 1) * limit;
-    const tag = req.query.tag;
-    const search = req.query.search;
-    const seed = req.query.seed || Math.floor(Math.random() * 1000000);
-    
-    // Build WHERE clause
-    let whereClause = '';
-    let params = [];
-    
-    if (tag && tag !== 'all') {
-      whereClause = 'WHERE tag = ?';
-      params.push(tag);
-    }
-    
-    if (search && search.trim()) {
-      if (whereClause) {
-        whereClause += ' AND (title LIKE ? OR tag LIKE ?)';
-      } else {
-        whereClause = 'WHERE (title LIKE ? OR tag LIKE ?)';
-      }
-      const searchPattern = `%${search}%`;
-      params.push(searchPattern, searchPattern);
-    }
-    
-    // Get total count
-    const countQuery = `SELECT COUNT(*) as total FROM memes ${whereClause}`;
-    const [countResult] = await db.query(countQuery, params);
-    const total = countResult[0].total;
-    
-    // Get paginated results with stable random order using seed
-    // Using ORDER BY RAND(seed) gives consistent ordering per session
-    const orderClause = seed ? `ORDER BY RAND(${seed})` : 'ORDER BY RAND()';
-    const dataQuery = `
-      SELECT * FROM memes 
-      ${whereClause} 
-      ${orderClause}
-      LIMIT ? OFFSET ?
-    `;
-    
-    const dataParams = [...params, limit, offset];
-    const [rows] = await db.query(dataQuery, dataParams);
-    
-    const hasMore = offset + limit < total;
-    
-    res.json({
-      data: rows,
-      page: page,
-      limit: limit,
-      total: total,
-      hasMore: hasMore,
-      seed: seed
-    });
+    console.log('Fetching memes...');
+    const [rows] = await db.query('SELECT * FROM memes ORDER BY id DESC');
+    console.log(`Found ${rows.length} memes`);
+    // Send array directly (not wrapped in {data: []})
+    res.json(rows);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Database error' });
+    console.error('Database error:', error);
+    res.status(500).json({ error: 'Database error', details: error.message });
   }
 });
 
-// POST new meme - PROTECTED with auth middleware
+// POST new meme - PROTECTED
 router.post('/', authMiddleware, upload.single('image'), async (req, res) => {
   try {
+    console.log('Upload request received');
+    
     if (!req.file) {
       return res.status(400).json({ error: 'Image required' });
     }
@@ -114,20 +67,22 @@ router.post('/', authMiddleware, upload.single('image'), async (req, res) => {
       [title, tag || 'Uncategorized', imageUrl, publicId, date]
     );
 
+    console.log('Meme saved with ID:', result.insertId);
+    
     res.status(201).json({
       id: result.insertId,
       title,
       tag: tag || 'Uncategorized',
-      imageUrl: imageUrl,
+      image_url: imageUrl,
       date
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Upload failed' });
+    console.error('Upload error:', error);
+    res.status(500).json({ error: 'Upload failed', details: error.message });
   }
 });
 
-// DELETE meme by ID - PROTECTED with auth middleware
+// DELETE meme - PROTECTED
 router.delete('/:id', authMiddleware, async (req, res) => {
   try {
     const [rows] = await db.query('SELECT public_id FROM memes WHERE id = ?', [req.params.id]);
@@ -148,7 +103,7 @@ router.delete('/:id', authMiddleware, async (req, res) => {
     
     res.json({ message: 'Meme deleted successfully' });
   } catch (error) {
-    console.error(error);
+    console.error('Delete error:', error);
     res.status(500).json({ error: 'Delete failed' });
   }
 });
